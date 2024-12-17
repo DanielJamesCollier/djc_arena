@@ -6,15 +6,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define ARENA_PAGE_LIMIT 80
-
 INT arena_page_fault_handler(struct Arena* arena, DWORD dwCode) {
   if (dwCode != EXCEPTION_ACCESS_VIOLATION) {
     printf("Exception code = %lu.\n", dwCode);
     return EXCEPTION_EXECUTE_HANDLER;
   }
 
-  if (arena->pages_committed >= ARENA_PAGE_LIMIT) {
+  if (arena->pages_committed >= arena->page_limit) {
     printf("Exception: out of pages.\n");
     return EXCEPTION_EXECUTE_HANDLER;
   }
@@ -31,30 +29,35 @@ INT arena_page_fault_handler(struct Arena* arena, DWORD dwCode) {
   return EXCEPTION_CONTINUE_EXECUTION;
 }
 
-struct Arena* arena_create(char* name) {
+struct Arena* arena_create(char* name, size_t page_limit) {
   SYSTEM_INFO sys_info;
   GetSystemInfo(&sys_info);
 
   struct Arena* arena = (struct Arena*)malloc(sizeof(struct Arena));
-  arena->name = name;
   arena->page_size = sys_info.dwPageSize;
+  arena->page_limit = page_limit;
   arena->pages_committed = 0;
-  arena->base_address = VirtualAlloc(NULL, ARENA_PAGE_LIMIT * arena->page_size,
+  arena->name = name;
+  arena->base_address = VirtualAlloc(NULL, arena->page_limit * arena->page_size,
                                      MEM_RESERVE, PAGE_NOACCESS);
+  arena->current = arena->base_address;
 
   if (arena->base_address == NULL) {
     printf("Virtual alloc failed. calling ExitProcess.");
     ExitProcess(1);
   }
 
-  arena->current = arena->base_address;
   return arena;
 }
 
-void* arena_alloc(struct Arena* arena, size_t size) {
+void* arena_alloc(struct Arena* arena,
+                  size_t sizeof_element,
+                  size_t num_elements) {
   size_t offset = (size_t)((char*)arena->current - (char*)arena->base_address);
 
-  if (offset + size > ARENA_PAGE_LIMIT * arena->page_size) {
+  size_t num_bytes = sizeof_element * num_elements;
+
+  if (offset + num_bytes > arena->page_limit * arena->page_size) {
     printf("%s allocation failed. Limit reached", arena->name);
     ExitProcess(1);
     return NULL;
@@ -70,7 +73,7 @@ void* arena_alloc(struct Arena* arena, size_t size) {
     // wrap all accesses to the arena memory in __try __except
     // blocks.
     volatile char* test = (char*)allocated_memory;
-    for (size_t i = 0; i < size; i++) {
+    for (size_t i = 0; i < num_bytes; i++) {
       test[i] = 0;
     }
   } __except (arena_page_fault_handler(arena, GetExceptionCode())) {
@@ -81,7 +84,7 @@ void* arena_alloc(struct Arena* arena, size_t size) {
     return NULL;
   }
 
-  arena->current = (char*)arena->current + size;
+  arena->current = (char*)arena->current + num_bytes;
   return allocated_memory;
 }
 
