@@ -1,17 +1,18 @@
 #ifndef DJC_ARENA_H_
 #define DJC_ARENA_H_
 
-#define ARENA_PAGE_LIMIT 80
+#include <stddef.h>
 
-typedef struct Arena {
+struct Arena {
+  char* name;
   void* base_address;
-  void* current_page;
-  DWORD page_size;
-  DWORD pages_committed;
-} Arena;
+  void* current;
+  size_t page_size;
+  size_t pages_committed;
+};
 
-Arena* arena_create();
-void* arena_alloc(Arena* arena, size_t size);
-void arena_free(Arena* arena);
+struct Arena* arena_create(char* name);
+void* arena_alloc(struct Arena* arena, size_t size);
+void arena_free(struct Arena* arena);
 
 #endif  // DJC_ARENA_H_
