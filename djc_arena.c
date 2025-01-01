@@ -34,6 +34,10 @@ struct Arena* arena_create(char* name, size_t page_limit) {
   GetSystemInfo(&sys_info);
 
   struct Arena* arena = (struct Arena*)malloc(sizeof(struct Arena));
+  if (arena == NULL) {
+    puts("Failed to malloc Arena. Calling exit(1)");
+    exit(1);
+  }
   arena->page_size = sys_info.dwPageSize;
   arena->page_limit = page_limit;
   arena->pages_committed = 0;
